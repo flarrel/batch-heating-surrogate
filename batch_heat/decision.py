@@ -7,6 +7,7 @@ import numpy as np
 from .simulation import HORIZON_S, MAX_POWER_KW, SENSOR_LIMITS_C, STEP_S, sample_vessel
 
 FIXED_POWER_KW = 10
+SENSOR_MARGIN_C = 0.5
 POWER_GRID = tuple(range(MAX_POWER_KW + 1))
 
 
@@ -53,12 +54,20 @@ def recommend(model, vessel, observed_c, observation_s, decision_s, history_c, t
             if target_c <= forecast <= ceiling_c:
                 checks += 1
                 verified = outcome(vessel, observed_c, power, target_c, ceiling_c)
-                if verified["feasible"]:
+                lower_end = vessel.advance(observed_c - SENSOR_MARGIN_C, power)
+                upper_start = observed_c + SENSOR_MARGIN_C
+                upper_end = vessel.advance(upper_start, power)
+                if (
+                    verified["feasible"]
+                    and lower_end >= target_c
+                    and max(upper_start, upper_end) <= ceiling_c
+                ):
                     return {
                         "status": "recommend",
                         "predicted_end_c": float(forecast),
                         "fixed_power_prediction_c": fixed_prediction,
                         "candidates_rechecked": checks,
+                        "sensor_margin_c": SENSOR_MARGIN_C,
                         "setting": verified,
                     }
     return {
@@ -101,7 +110,7 @@ def replay(model, vessel, initial_c=36, target_c=41.5, ceiling_c=46):
     return {"source": "simulated", "target_c": target_c, "ceiling_c": ceiling_c, "events": events}
 
 
-def evaluate_decisions(model, seed=9041, cases=150):
+def evaluate_decisions(model, seed=9042, cases=150):
     """Compare policies on independently seeded scenarios using hidden simulator state."""
     rng = np.random.default_rng(seed)
     selection_stats = {
@@ -148,6 +157,7 @@ def evaluate_decisions(model, seed=9041, cases=150):
         "scenarios": cases,
         "surrogate_optimizer": selection_stats,
         "fixed_rule": {"power_kw": FIXED_POWER_KW, **fixed_stats},
+        "sensor_margin_c": SENSOR_MARGIN_C,
         "paired_feasible_cases": len(paired_energy),
         "paired_mean_energy_delta_kwh": float(np.mean(paired_energy)) if paired_energy else None,
         "paired_mean_time_delta_s": float(np.mean(paired_time)) if paired_time else None,

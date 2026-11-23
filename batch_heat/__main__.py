@@ -25,6 +25,7 @@ def main(argv=None):
     demo.add_argument("--ceiling", type=float, default=46)
     evaluation = commands.add_parser("evaluate", help="Compare the saved model against a fixed policy")
     evaluation.add_argument("--run", type=Path, required=True)
+    evaluation.add_argument("--seed", type=int, default=9042)
     args = parser.parse_args(argv)
 
     if args.command == "train":
@@ -46,7 +47,7 @@ def main(argv=None):
             if args.command == "replay":
                 result = replay(model, Vessel(22, 100, 0.12), target_c=args.target, ceiling_c=args.ceiling)
             else:
-                result = evaluate_decisions(model)
+                result = evaluate_decisions(model, seed=args.seed)
         except (OSError, ValueError) as error:
             parser.error(str(error))
     print(json.dumps(result, indent=2, allow_nan=False))

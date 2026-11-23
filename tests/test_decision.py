@@ -6,9 +6,6 @@ from batch_heat.simulation import Vessel
 
 
 class ThermalForecast:
-    def __init__(self, vessel):
-        self.vessel = vessel
-
     def predict(self, rows):
         return [
             Vessel(row["ambient_c"], row["capacity_kj_per_c"], row["loss_kw_per_c"]).advance(
@@ -24,7 +21,7 @@ class ThermalForecast:
 class DecisionTest(unittest.TestCase):
     def setUp(self):
         self.vessel = Vessel(22, 100, 0.12)
-        self.model = ThermalForecast(self.vessel)
+        self.model = ThermalForecast()
 
     def decide(self, temperature, target, ceiling, reading_s=60):
         return recommend(
@@ -36,7 +33,10 @@ class DecisionTest(unittest.TestCase):
         self.assertEqual(result["status"], "recommend")
         self.assertEqual(result["setting"]["power_kw"], 8)
         self.assertTrue(result["setting"]["feasible"])
-        self.assertGreaterEqual(result["setting"]["end_c"], 41)
+        margin = result["sensor_margin_c"]
+        self.assertGreaterEqual(self.vessel.advance(38 - margin, 8), 41)
+        self.assertLess(self.vessel.advance(38 - margin, 7), 41)
+        self.assertLessEqual(self.vessel.advance(38 + margin, 8), 46)
 
     def test_declines_when_missing_delayed_out_of_range_or_infeasible(self):
         for temperature, target, ceiling, reading_s, expected in (
@@ -44,6 +44,7 @@ class DecisionTest(unittest.TestCase):
             (38, 41, 46, 0, "invalid_or_stale_reading"),
             (75, 78, 85, 60, "outside_training_range"),
             (30, 45, 48, 60, "no_feasible_setting"),
+            (38, 41, 41.2, 60, "no_feasible_setting"),
         ):
             with self.subTest(expected=expected):
                 self.assertEqual(self.decide(temperature, target, ceiling, reading_s)["status"], expected)
